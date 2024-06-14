@@ -7,68 +7,32 @@ from scipy.spatial.distance import cdist
 import seaborn as sns
 from statistics import mode
 
-
 class Gabriel_Graph:
     def __init__(self, X, y, index=None, dist_method="euclidean", palette="bright"):
-        """## Initializer for Gabriel Graph.
+        """Initialize the Gabriel Graph.
 
-        ### Args:
-        - `X (pd.DataFrame)`: Input matrix containing features (without labels!).
-        - `y (pd.DataFrame or np.ndarray)`: Label vector.
-        - `index (array, optional)`: Index array for the input matrix. If not explicitly provided, DataFrames index will be used.
-        - `dist_method (str, optional)`: Distance metric for calculating distances between samples (nodes) for generating the graph. Defaults to 'euclidean'.
-        - `palette (str, optional)`: Color palette for node representation. Defaults to 'bright'.
-
-        ### Attributes:
-        - `X_`: DataFrame containing feature values.
-        - `y_`: Numpy array containing label values.
-        - `index_`: Array containing index values.
-        - `dist_method_`: Metric used for calculating the graph. Read more on [Distance metrics in SciPy](https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.cdist.html)
-        - `palette_deft_`: Default palette used for plotting the graph. Read more on [Color palettes in Seaborn](https://seaborn.pydata.org/tutorial/color_palettes.html)
-        - `centers_`: Structural Support Vectors (SSV) or "Vetores de Suporte Estrutuais (VSE)". Read more on [Dissertação Matheus Salgado](https://repositorio.ufmg.br/bitstream/1843/RAOA-BCFHQJ/1/matheus_salgado_dissertacao__1_.pdf)
-        - `GGraph_`: The Gabriel Graph itself represented by a networkx graph object.
-        - `node_locations_`: Feature vector describing each sample (node) in the graph.
-        - `node_colors_`: Color of each node. It is used for distinguishing classes or SSVs in cases when plotting is necessary.
-        - `node_ids_`: Name of each node.
-        - `Vp_`: V' (V prime) calculated based on Wilson editing algorithm. This represents the noise-cleaned DataFrame, containing both features and labels.
-
-        ### Examples:
-
-        Creating a Gabriel Graph using Wilson editing for noise reduction.
-
-        ```
-        # Importing the package
-        >> import Gabriel_Graph as GG
-        # Loading a dataset
-        >> X, y = make_moons(200, noise=0.1, random_state=42)
-        # Instantiating the graph
-        >> graph = GG.Gabriel_Graph(X, y)
-        # Building the graph and applying Wilson editing with a k=10
-        >> graph.build(wilson_editing=True, k=10)
-        # Calculating the centers (SSVs)
-        >> graph.calculate_centers()
-        # Plotting the graph (only is data is binary, bidimensional and labels are in a {1, 0} range)
-        >> graph.plot(label=True, show_centers=True)
-        ```
+        Args:
+            X (pd.DataFrame or np.ndarray): Input matrix containing features (without labels).
+            y (pd.DataFrame or np.ndarray): Label vector.
+            index (array, optional): Index array for the input matrix. Defaults to None.
+            dist_method (str, optional): Distance metric for calculating distances between samples. Defaults to 'euclidean'.
+            palette (str, optional): Color palette for node representation. Defaults to 'bright'.
         """
-        if type(X) != pd.DataFrame:
+        if not isinstance(X, pd.DataFrame):
             X = pd.DataFrame(X)
         self.X_ = X
 
-        if type(y) != np.ndarray:
+        if not isinstance(y, np.ndarray):
             y = np.array(y)
         self.y_ = y
 
-        if index is not None:
-            self.index_ = index
-        else:
-            self.index_ = X.index
+        self.index_ = index if index is not None else X.index
 
         assert isinstance(dist_method, str), "dist_method must be a string."
         self.dist_method_ = dist_method
 
-        assert isinstance(palette, str), "palette_default must be a string"
-        self.palette_deft_ = sns.color_palette(palette)
+        assert isinstance(palette, str), "palette must be a string."
+        self.palette_ = palette
 
         self.centers_ = None
         self.GGraph_ = None
@@ -78,37 +42,102 @@ class Gabriel_Graph:
         self.Vp_ = None
 
     def build(self, wilson_editing=False, k=1):
-        """Constructs a Gabriel Graph, a proximity graph representing
-        the relationships between points in the input matrix (X). If labels (y) are
-        provided, it can be used for supervised learning tasks. Distances between
-        points are calculated based on the method specified in the initializer.
+        """Builds the Gabriel Graph.
 
-        ### Args:
-            - `wilson_editing (bool, optional)`: If True, implements Wilson editing algorithm for noise reduction. Defaults to False. Read more on [Using Representative-Based Clustering for Nearest Neighbor Dataset Editing](https://www.researchgate.net/profile/Ricardo-Vilalta/publication/4133603_Using_Representative-Based_Clustering_for_Nearest_Neighbor_Dataset_Editing/links/0f31753c55a8d611fc000000/Using-Representative-Based-Clustering-for-Nearest-Neighbor-Dataset-Editing.pdf?origin=publication_detail&_tp=eyJjb250ZXh0Ijp7ImZpcnN0UGFnZSI6Il9kaXJlY3QiLCJwYWdlIjoicHVibGljYXRpb25Eb3dubG9hZCIsInByZXZpb3VzUGFnZSI6InB1YmxpY2F0aW9uIn19)
-
-            - `k (int, optional)`: The k parameter for Wilson editing. Defaults to 1 (1-NN).
+        Args:
+            wilson_editing (bool, optional): Whether to apply Wilson editing for noise reduction. Defaults to False.
+            k (int, optional): The k parameter for Wilson editing. Defaults to 1.
         """
-
         if wilson_editing:
-            D = cdist(self.X_, self.X_, metric=self.dist_method_)
-            dist_vet = []
-            Vp = []
+            self._apply_wilson_editing(k)
 
-            for i in range(len(D)):
-                dist_vet = D[i,]
-                idx_knn = np.argsort(dist_vet)[: k + 1]
-                idx_knn = np.delete(idx_knn, 0)
-                k_nearest_classes = self.y_[idx_knn]
-                moda = mode(k_nearest_classes)
-                i_pred = moda
-                if self.y_[i] == i_pred:
-                    Vp.append(np.hstack((self.X_.iloc[i,].values, self.y_[i])))
+        self._construct_graph()
 
-            Vp = pd.DataFrame(Vp)
-            self.Vp_ = Vp
-            self.X_ = Vp.iloc[:, :-1]
-            self.y_ = Vp.iloc[:, -1].astype(int)
+    def plot(self, label=True, show_centers=False):
+        """Plots the Gabriel Graph.
 
+        Args:
+            label (bool, optional): Whether to show labels. Defaults to True.
+            show_centers (bool, optional): Whether to highlight centers. Defaults to False.
+        """
+        if show_centers:
+            assert self.centers_ is not None, "Centers were not calculated yet."
+            node_colors = self._get_center_highlighted_colors()
+        else:
+            node_colors = self.node_colors_
+
+        nx.draw(
+            self.GGraph_,
+            pos=self.node_locations_,
+            node_color=node_colors,
+            labels=self.node_ids_,
+            with_labels=label,
+            alpha=0.8,
+            edgecolors="black",
+        )
+        plt.show()
+
+    def adjacency_matrix(self, sparse=False):
+        """Returns the adjacency matrix of the graph.
+
+        Args:
+            sparse (bool, optional): Whether to return a sparse matrix. Defaults to False.
+
+        Returns:
+            pd.DataFrame or scipy sparse matrix: Adjacency matrix representation.
+        """
+        adj_mat = nx.adjacency_matrix(self.GGraph_)
+
+        if sparse:
+            return adj_mat
+        else:
+            adj_mat = pd.DataFrame(adj_mat.toarray())
+            return adj_mat
+
+    def calculate_centers(self):
+        """Calculates the centers (SSVs).
+
+        Returns:
+            pd.DataFrame: Centers (SSVs).
+        """
+        edges = list(self.GGraph_.edges())
+
+        node_positions = [self.GGraph_.nodes[i]["pos"] for i in self.GGraph_.nodes]
+        node_positions = pd.DataFrame(node_positions)
+
+        centers = []
+        for i in range(len(edges)):
+            x1 = edges[i][0]
+            x2 = edges[i][1]
+            if self.GGraph_.nodes[x1]["label"] != self.GGraph_.nodes[x2]["label"]:
+                centers.append(node_positions.iloc[x1, :])
+                centers.append(node_positions.iloc[x2, :])
+        centers = pd.DataFrame(centers).drop_duplicates()
+        self.centers_ = centers
+        return centers
+
+    def _apply_wilson_editing(self, k):
+        """Applies Wilson editing for noise reduction."""
+        D = cdist(self.X_, self.X_, metric=self.dist_method_)
+        Vp = []
+
+        for i in range(len(D)):
+            dist_vet = D[i, :]
+            idx_knn = np.argsort(dist_vet)[:k + 1]
+            idx_knn = np.delete(idx_knn, 0)
+            k_nearest_classes = self.y_[idx_knn]
+            moda = mode(k_nearest_classes)
+            i_pred = moda
+            if self.y_[i] == i_pred:
+                Vp.append(np.hstack((self.X_.iloc[i, :].values, self.y_[i])))
+
+        Vp = pd.DataFrame(Vp)
+        self.Vp_ = Vp
+        self.X_ = Vp.iloc[:, :-1]
+        self.y_ = Vp.iloc[:, -1].astype(int)
+
+    def _construct_graph(self):
+        """Constructs the Gabriel Graph."""
         D = cdist(self.X_, self.X_, metric=self.dist_method_)
 
         GG = nx.Graph()
@@ -120,14 +149,14 @@ class Gabriel_Graph:
                 pos=self.X_.iloc[i, :],
                 label=label,
                 id=self.X_.index[i],
-                color=self.palette_deft_[label],
+                color=sns.color_palette(self.palette_)[label],
             )
 
         for i in range(len(self.X_)):
             for j in range(i + 1, len(self.X_)):
+                is_GG = True
                 for k in range(len(self.X_)):
-                    is_GG = True
-                    if (i != j) and (j != k) and (i != k):
+                    if i != j and j != k and i != k:
                         if D[i, j] ** 2 > (D[i, k] ** 2 + D[j, k] ** 2):
                             is_GG = False
                             break
@@ -139,75 +168,12 @@ class Gabriel_Graph:
         self.node_colors_ = list(nx.get_node_attributes(GG, "color").values())
         self.node_ids_ = nx.get_node_attributes(GG, "id")
 
-    def plot(self, label=True, show_centers=False):
-        """Plots a 2D graph if data is binary, bidimensional and labels are in an {1, 0} range.
-
-        ### Args:
-            - `label (bool, optional)`: Presence of labels. Defaults to True.
-        """
-        if show_centers:
-            assert self.centers_ is not None, "Centers were not calculated yet."
-            color_aux_list = self.node_colors_.copy()
-            for i in self.GGraph_.nodes:
-                if i in self.centers_.index:
-                    # color_aux_list[i] = 'gray' se quiser cinza
-                    rgb_val = list(color_aux_list[i])
-                    rgb_val[1] += 0.5
-                    color_aux_list[i] = rgb_val
-
-        nx.draw(
-            self.GGraph_,
-            self.node_locations_,
-            node_color=color_aux_list if show_centers else self.node_colors_,
-            labels=self.node_ids_,
-            with_labels=label,
-            alpha=0.8,
-            edgecolors="black",
-        )
-        plt.show()
-
-    def adjacency_matrix(self, sparse=False):
-        """Adjacency matrix representation of the graph. Is useful for
-        for visualizing graphs with dimensions greater than 2 or 3.
-
-        ### Args:
-            - `sparse (bool, optional)`: If True returns a sparse matrix in scipy. If False, returns a pandas DataFrame. Defaults to False.
-
-        ### Returns:
-            - `pandas DataFrame or scipy sparse matrix`: Adjacency matrix.
-        """
-        adj_mat = nx.adjacency_matrix(self.GGraph_)
-
-        if sparse:
-            return adj_mat
-        if not sparse:
-            adj_mat = pd.DataFrame(adj_mat.toarray())
-            return adj_mat
-
-    def calculate_centers(self):
-        """Calculates the Structural Support Vectors (SSV) or "Vetores de Suporte Estrutuais (VSE)". Read more on [Dissertação Matheus Salgado](https://repositorio.ufmg.br/bitstream/1843/RAOA-BCFHQJ/1/matheus_salgado_dissertacao__1_.pdf)
-
-        ### Returns:
-            - `pd.DataFrame`: Vector of centers (SSVs)
-        """
-        edges = list(self.GGraph_.edges())
-
-        node_pos = []
-        node_labels = []
+    def _get_center_highlighted_colors(self):
+        """Returns node colors with centers highlighted."""
+        color_aux_list = self.node_colors_[:]
         for i in self.GGraph_.nodes:
-            node_pos.append(self.GGraph_.nodes[i]["pos"])
-            node_labels.append(self.GGraph_.nodes[i]["label"])
-        node_pos = pd.DataFrame(node_pos)
-        node_labels = pd.DataFrame(node_labels)
-
-        centers = []
-        for i in range(len(edges)):
-            x1 = edges[i][0]
-            x2 = edges[i][1]
-            if self.GGraph_.nodes[x1]["label"] != self.GGraph_.nodes[x2]["label"]:
-                centers.append(node_pos.iloc[x1, :])
-                centers.append(node_pos.iloc[x2, :])
-        centers = pd.DataFrame(centers)
-        centers = centers.drop_duplicates()
-        self.centers_ = centers
-        return centers
+            if i in self.centers_.index:
+                rgb_val = list(color_aux_list[i])
+                rgb_val[1] += 0.5
+                color_aux_list[i] = tuple(rgb_val)
+        return color_aux_list
