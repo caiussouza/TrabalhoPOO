@@ -25,7 +25,6 @@ class GGRBF_BC_Classifier(GGRBF, RBF):
         self.sample = (self.sample - min(self.sample)) / (
             max(self.sample) - min(self.sample)
         )
-        print(self.sample)
         return GGRBF.predict(self, self.sample, classification=True)[0]
 
     def _preprocessing(self) -> None:
