@@ -11,7 +11,29 @@ class Breast_Cancer_APP:
         """Instantiates the Breast_Cancer_APP class.
 
         ### Args:
-            `model (Type[GGRBF_BC_Classifier])`: Trained model.
+        -   `model (Type[GGRBF_BC_Classifier])`: Trained model.
+
+        ### Attributes:
+        -   `_model (Type[GGRBF_BC_Classifier])`: Trained model.
+        -   `_feature_names (np.ndarray[str])`: Names of the features.
+        -   `_root (Type[tk.Tk])`: Tkinter root.
+        -   `_entries (list[float])`: Entries of the user input.
+        -   `_result_label (Type[tk.Label])`: Label to display the result.
+
+        ### Example:
+        ```
+        # Importing the packages
+        >> from src.models.GGRBF_BC_Classifier import GGRBF_BC_Classifier
+        >> from src.app.Breast_Cancer_APP import Breast_Cancer_APP
+        # Instantiating the model
+        >> model = GGRBF_BC_Classifier()
+        # Fitting the model
+        >> model.fit_model()
+        # Instantiating the interface
+        >> interface = Breast_Cancer_APP(model)
+        # Running the interface
+        >> interface.start_app()
+        ```
         """
         self._model: Type[GGRBF_BC_Classifier] = model
         self._feature_names: np.ndarray[str] = load_breast_cancer().feature_names

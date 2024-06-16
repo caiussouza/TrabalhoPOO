@@ -13,14 +13,50 @@ class RBF:
             `center (pd.DataFrame)`: RBF centers.
             `sigma (int or float)`: sigma value.
 
+        ### Attributes:
+        -   `n_centers (int)`: Number of centers.
+        -   `centers (pd.DataFrame)`: Centers.
+        -   `sigma (int or float)`: Width parameter for the RBF kernel.
+        -   `w (np.ndarray)`: Weights.
+
+        ### Example:
+        ```
+        # Importing necessary libraries
+        >> from src.models.RBF import RBF
+        >> from sklearn.datasets import load_breast_cancer
+        >> from sklearn.metrics import roc_auc_score
+        >> from sklearn.model_selection import train_test_split
+        >> from sklearn.preprocessing import MinMaxScaler
+
+        # Loading the dataset
+        >> X, y = load_breast_cancer(return_X_y=True)
+
+        # Preprocessing
+        >> scaler = MinMaxScaler()
+        >> X = scaler.fit_transform(X)
+        >> X = pd.DataFrame(X)
+        >> y = 2 * (y == 1) - 1
+        >> X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Fitting the model
+
+        # centers = [matrix of centers calculated by some method, like K-means]
+        >> model = RBF(sigma=1, centers=centers)
+        >> model.fit_model(X_train, y_train)
+        >> y_hat = model.predict(X_test)
+
+        # Evaluating the performance using the ROC AUC score
+        >> print(roc_auc_score(y_test, y_hat))
+        ```
+
         For more information on Radial Basis Function Networks (RBFNs), reach [Radial Basis Function Networks(RBFNs)](https://mohamedbakrey094.medium.com/radial-basis-function-networks-rbfns-be2ec324d8fb)
         """
-        self.n_centers = centers.shape[0]
-        self.centers = centers.values
-        self.sigma = sigma
-        self.w = None
+        self._n_centers: int = centers.shape[0]
+        self._centers: pd.DataFrame = centers.values
+        self._sigma: Union[int, float] = sigma
+        self._w: np.ndarray = None
 
-    def _gaussian_rbf(
+    def _rbf_kernel(
         self,
         x: Union[int, float, pd.DataFrame],
         center: Union[int, float, pd.DataFrame],
@@ -28,7 +64,7 @@ class RBF:
     ) -> Union[float, pd.DataFrame]:
         """Gaussian kernel.
 
-        Refer to: [Gaussian kernel](https://towardsdatascience.com/radial-basis-function-rbf-kernel-the-go-to-kernel-acf0d22c798a)
+        Refer to: [RBF kernel](https://towardsdatascience.com/radial-basis-function-rbf-kernel-the-go-to-kernel-acf0d22c798a)
 
         ### Args:
             `x (int, float or pd.DataFrame)`: Argument.
@@ -55,16 +91,16 @@ class RBF:
             y_train = 2 * (y_train == 1) - 1
         N = X_train.shape[0]
 
-        Phi = np.zeros((N, self.n_centers + 1))
+        Phi = np.zeros((N, self._n_centers + 1))
         for lin in range(N):
             Phi[lin, 0] = 1
-            for col in range(self.n_centers):
-                Phi[lin, col + 1] = self._gaussian_rbf(
-                    X_train.iloc[lin, :], self.centers.iloc[col, :], self.sigma
+            for col in range(self._n_centers):
+                Phi[lin, col + 1] = self._rbf_kernel(
+                    X_train.iloc[lin, :], self._centers.iloc[col, :], self._sigma
                 )
         w = np.linalg.pinv(Phi.T @ Phi) @ Phi.T @ y_train
 
-        self.w = w
+        self._w = w
 
     def predict(self, X_test: pd.DataFrame, classification: bool = False) -> np.ndarray:
         """Performs a prediction based on learned parameters.
@@ -77,11 +113,11 @@ class RBF:
             `y_hat (np.ndarray)`: Array containing predictions.
         """
         N = X_test.shape[0]
-        pred = np.repeat(self.w[0], N)
+        pred = np.repeat(self._w[0], N)
         for j in range(N):
-            for k in range(len(self.centers)):
-                pred[j] += self.w[k + 1] * self._gaussian_rbf(
-                    X_test.iloc[j, :], self.centers.iloc[k, :], self.sigma
+            for k in range(len(self._centers)):
+                pred[j] += self._w[k + 1] * self._rbf_kernel(
+                    X_test.iloc[j, :], self._centers.iloc[k, :], self._sigma
                 )
         if classification:
             pred = np.sign(pred)

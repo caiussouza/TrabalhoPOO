@@ -17,17 +17,18 @@ class Gabriel_Graph(Graph):
         - `y (np.ndarray)`: Label vector.
 
         ### Attributes:
-        - `X_`: DataFrame containing feature values.
-        - `y_`: Numpy array containing label values.
-        - `centers_`: Structural Support Vectors (SSV) or "Vetores de Suporte
+        - `_X (pd.DataFrame)`: DataFrame containing feature values.
+        - `_y (np.ndarray)`: Numpy array containing label values.
+        - `_index (pd.Index)`: Index array for the input matrix.
+        - `_centers (pd.DataFrame)`: Structural Support Vectors (SSV) or "Vetores de Suporte
            Estrutuais (VSE)". Read more on [Dissertação Matheus Salgado](https://repositorio.ufmg.br/bitstream/1843/RAOA-BCFHQJ/1/matheus_salgado_dissertacao__1_.pdf)
-        - `GG`: The Gabriel Graph itself represented by a networkx graph
+        - `_GG (nx.Graph)`: The Gabriel Graph itself represented by a networkx graph
            object.
-        - `node_locations_`: Feature vector describing each sample (node) in
+        - `_node_locations (dict[float, float])`: Feature vector describing each sample (node) in
            the graph.
-        - `node_colors_`: Color of each node. It is used for distinguishing
+        - `_node_colors (list[tuple[float, float, float]])`: Color of each node. It is used for distinguishing
            classes or SSVs in cases when plotting is necessary.
-        - `node_ids_`: Name of each node.
+        - `_node_ids (dict[int, int])`: Name of each node.
 
         ### Example:
 
@@ -51,17 +52,17 @@ class Gabriel_Graph(Graph):
         """
 
         assert isinstance(X, pd.DataFrame), "X must be a pandas DataFrame"
-        self.X_ = X
+        self._X: pd.DataFrame = X
         assert isinstance(y, np.ndarray), "y must be a numpy ndarray"
-        self.y_ = y
+        self._y: np.ndarray = y
 
-        self.index_ = X.index
+        self._index: pd.Index = X.index
 
-        self.centers_ = None
-        self.GG = None
-        self.node_locations_ = None
-        self.node_colors_ = None
-        self.node_ids_ = None
+        self._centers: pd.DataFrame = None
+        self._GG: nx.Graph = None
+        self._node_locations: dict[float, float, int] = None
+        self._node_colors: list[tuple[float, float, float]] = None
+        self._node_ids: dict[int, int] = None
 
     def build(self) -> None:
         """
@@ -72,25 +73,25 @@ class Gabriel_Graph(Graph):
         specified in the initializer.
         """
 
-        D = cdist(self.X_, self.X_, metric="euclidean")
+        D = cdist(self._X, self._X, metric="euclidean")
 
         GG = nx.Graph()
 
         palette = sns.color_palette("bright")
 
-        for i in range(len(self.X_)):
-            label = self.y_[i]
+        for i in range(len(self._X)):
+            label = self._y[i]
             GG.add_node(
                 i,
-                pos=self.X_.iloc[i, :],
+                pos=self._X.iloc[i, :],
                 label=label,
-                id=self.X_.index[i],
+                id=self._X.index[i],
                 color=palette[label],
             )
 
-        for i in range(len(self.X_)):
-            for j in range(i + 1, len(self.X_)):
-                for k in range(len(self.X_)):
+        for i in range(len(self._X)):
+            for j in range(i + 1, len(self._X)):
+                for k in range(len(self._X)):
                     is_GG = True
                     if (i != j) and (j != k) and (i != k):
                         if D[i, j] ** 2 > (D[i, k] ** 2 + D[j, k] ** 2):
@@ -99,10 +100,10 @@ class Gabriel_Graph(Graph):
                 if is_GG:
                     GG.add_edge(i, j)
 
-        self.GG = GG
-        self.node_locations_ = nx.get_node_attributes(GG, "pos")
-        self.node_colors_ = list(nx.get_node_attributes(GG, "color").values())
-        self.node_ids_ = nx.get_node_attributes(GG, "id")
+        self._GG = GG
+        self._node_locations = nx.get_node_attributes(GG, "pos")
+        self._node_colors = list(nx.get_node_attributes(GG, "color").values())
+        self._node_ids = nx.get_node_attributes(GG, "id")
 
     def plot(self, label: bool = True, show_centers: bool = False) -> None:
         """Plots a 2D graph if data is binary, bidimensional and labels are in
@@ -114,19 +115,19 @@ class Gabriel_Graph(Graph):
                to False.
         """
         if show_centers:
-            assert self.centers_ is not None, "Centers were not calculated."
-            color_aux_list = self.node_colors_.copy()
-            for i in self.GG.nodes:
-                if i in self.centers_.index:
+            assert self._centers is not None, "Centers were not calculated."
+            color_aux_list = self._node_colors.copy()
+            for i in self._GG.nodes:
+                if i in self._centers.index:
                     rgb_val = list(color_aux_list[i])
                     rgb_val[1] += 0.5
                     color_aux_list[i] = rgb_val
 
         nx.draw(
-            self.GG,
-            self.node_locations_,
-            node_color=color_aux_list if show_centers else self.node_colors_,
-            labels=self.node_ids_,
+            self._GG,
+            self._node_locations,
+            node_color=color_aux_list if show_centers else self._node_colors,
+            labels=self._node_ids,
             with_labels=label,
             alpha=0.8,
             edgecolors="black",
@@ -140,24 +141,24 @@ class Gabriel_Graph(Graph):
         ### Returns:
             - `adj_mat (pandas DataFrame)`: Adjacency matrix.
         """
-        adj_mat = nx.adjacency_matrix(self.GG)
+        adj_mat = nx.adjacency_matrix(self._GG)
         adj_mat = pd.DataFrame(adj_mat.toarray())
         return adj_mat
 
     def calculate_centers(self) -> pd.DataFrame:
-        """Calculates the Structural Support Vectors (SSV) or "Vetores de Suporte Estrutuais (VSE)". Read more on
+        """Calculates and returns the Structural Support Vectors (SSV) or "Vetores de Suporte Estrutuais (VSE)". Read more on
            [Dissertação Matheus Salgado](https://repositorio.ufmg.br/bitstream/1843/RAOA-BCFHQJ/1/matheus_salgado_dissertacao__1_.pdf)
 
         ### Returns:
             - `centers (pd.DataFrame)`: Vector of centers (SSVs)
         """
-        edges = list(self.GG.edges())
+        edges = list(self._GG.edges())
 
         node_pos = []
         node_labels = []
-        for i in self.GG.nodes:
-            node_pos.append(self.GG.nodes[i]["pos"])
-            node_labels.append(self.GG.nodes[i]["label"])
+        for i in self._GG.nodes:
+            node_pos.append(self._GG.nodes[i]["pos"])
+            node_labels.append(self._GG.nodes[i]["label"])
         node_pos = pd.DataFrame(node_pos)
         node_labels = pd.DataFrame(node_labels)
 
@@ -165,10 +166,10 @@ class Gabriel_Graph(Graph):
         for i in range(len(edges)):
             x1 = edges[i][0]
             x2 = edges[i][1]
-            if self.GG.nodes[x1]["label"] != self.GG.nodes[x2]["label"]:
+            if self._GG.nodes[x1]["label"] != self._GG.nodes[x2]["label"]:
                 centers.append(node_pos.iloc[x1, :])
                 centers.append(node_pos.iloc[x2, :])
         centers = pd.DataFrame(centers)
         centers = centers.drop_duplicates()
-        self.centers_ = centers
+        self._centers = centers
         return centers
